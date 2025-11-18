@@ -1,0 +1,98 @@
+name: Clínica - Daily Report
+
+on:
+  schedule:
+    # Send report daily at 10:00 AM Monday to Friday
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  send_daily_report:
+    name: Send Daily Report
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Get latest Allure report
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+          clean: true
+
+      - name: Find correct summary.json
+        id: find-summary
+        run: |
+          mkdir -p allure-report/widgets
+          mkdir -p allure-report/history
+
+          echo "Looking for summary.json files..."
+
+          TEMP_FILE=$(mktemp)
+
+          find gh-pages -name "summary.json" -type f | while read -r file; do
+            total=$(grep -o '"total":[0-9]*' "$file" | head -1 | cut -d: -f2)
+            if [ -n "$total" ] && [ "$total" -gt 0 ]; then
+              mod_time=$(stat -c "%Y" "$file")
+              echo "$mod_time $file $total" >> $TEMP_FILE
+              echo "Found valid file: $file (modified: $(date -d @$mod_time), tests: $total)"
+            else
+              echo "Skipping file with no tests: $file"
+            fi
+          done
+
+          if [ -s "$TEMP_FILE" ]; then
+            SELECTED=$(sort -nr $TEMP_FILE | head -1)
+            LATEST_FILE=$(echo $SELECTED | cut -d' ' -f2)
+            TESTS=$(echo $SELECTED | cut -d' ' -f3)
+            MOD_TIME=$(echo $SELECTED | cut -d' ' -f1)
+
+            echo "Selected file: $LATEST_FILE (modified: $(date -d @$MOD_TIME), tests: $TESTS)"
+            cp "$LATEST_FILE" allure-report/widgets/summary.json
+
+            REPORT_DIR=$(dirname $(dirname "$LATEST_FILE"))
+            echo "Searching for metadata in: $REPORT_DIR"
+            
+            METADATA_FILE=$(find "$REPORT_DIR" -name "test-metadata.json" -type f | head -1)
+            if [ -n "$METADATA_FILE" ]; then
+              echo "Found metadata file: $METADATA_FILE"
+              cp "$METADATA_FILE" allure-report/widgets/test-metadata.json
+              cat allure-report/widgets/test-metadata.json
+            else
+              echo "Warning: No metadata file found in $REPORT_DIR"
+            fi
+
+            HISTORY_DIR=$(dirname $(dirname "$LATEST_FILE"))/history
+            if [ -d "$HISTORY_DIR" ]; then
+              echo "Copying history from $HISTORY_DIR"
+              cp -r "$HISTORY_DIR/"* allure-report/history/ || echo "Error copying history"
+            fi
+
+            echo "File copied to allure-report/widgets/summary.json with $TESTS tests"
+          else
+            echo "No summary.json file found with tests > 0. Creating default file."
+            echo '{"reportName":"Clínica Tests","statistic":{"total":0,"passed":0,"failed":0,"skipped":0},"time":{"duration":0,"start":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'","stop":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > allure-report/widgets/summary.json
+          fi
+
+          rm -f $TEMP_FILE
+
+      - name: Install notification dependencies
+        run: npm install axios
+
+      - name: Send Teams notification
+        run: node lib/utils/send-teams-notification.js
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKFLOW: "Clínica - Daily Report"
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}

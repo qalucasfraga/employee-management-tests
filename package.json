@@ -1,0 +1,46 @@
+{
+  "name": "employee-management-tests",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/doutorfinancas/employee-management-tests",
+  "author": "Lucas Fraga <lucas.fraga@doutorfinancas.pt>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "@playwright/test": "^1.56.0"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.5.1",
+    "allure-commandline": "^2.32.2",
+    "allure-playwright": "^3.2.3",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.22.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-playwright": "^2.2.0",
+    "http-status-codes": "^2.3.0",
+    "joi": "^17.13.3"
+  },
+  "scripts": {
+    "clean": "rm -rf allure-* test-results reports .playwright-mcp",
+    "lint": "eslint tests/**/*.js --fix",
+    "test:api": "yarn playwright test --project api",
+    "test:e2e": "yarn playwright test --project e2e --headed",
+    "test:all": "yarn clean && yarn playwright test && yarn allure:report",
+    "test:api:ci": "yarn playwright test --project api --grep \"@regression\" --grep-invert \"@notImplemented|@bug|@error\" --reporter=allure-playwright",
+    "test:e2e:ci": "yarn playwright test --project e2e --grep \"@regression\" --grep-invert \"@notImplemented|@bug|@error\" --reporter=allure-playwright",
+    "docker:build": "docker build -t playwright-tests:latest --no-cache .",
+    "docker:api": "mkdir -p allure-results && chmod -R 777 allure-results && docker run --ipc=host --env-file .env -v $(pwd)/allure-results:/app/allure-results playwright-tests:latest api",
+    "docker:e2e": "mkdir -p allure-results && chmod -R 777 allure-results && docker run --ipc=host --env-file .env -v $(pwd)/allure-results:/app/allure-results playwright-tests:latest e2e",
+    "docker:all": "mkdir -p allure-results && chmod -R 777 allure-results && docker run --ipc=host --env-file .env -v $(pwd)/allure-results:/app/allure-results playwright-tests:latest all",
+    "allure:report": "allure generate allure-results -o allure-report --clean && allure open allure-report",
+    "allure:generate": "allure generate allure-results -o allure-report --clean"
+  },
+  "keywords": [
+    "Plawright",
+    "Test Runner",
+    "Test Automation",
+    "JavaScript",
+    "docker",
+    "allure"
+  ]
+}
